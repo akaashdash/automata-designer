@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Automata Creator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    
+    #canvas {
+      border: 1px solid #ccc;
+      margin-bottom: 20px;
+    }
+    
+    #controls {
+      margin-bottom: 20px;
+    }
+    
+    #latex-output {
+      white-space: pre;
+      font-family: monospace;
+      background-color: #f5f5f5;
+      padding: 10px;
+    }
+
+    .state {
+      cursor: pointer;
+    }
+    
+    .state.selected {
+      fill: #ff0000;
+    }
+    
+    .transition {
+      cursor: pointer;
+    }
+    
+    .transition.selected {
+      stroke: #ff0000;
+    }
+  </style>
+</head>
+<body>
+  </style>
+</head>
+<body>
+  <h1>Automata Creator</h1>
+  
+  <canvas id="canvas" width="800" height="600"></canvas>
+  
+  <div id="controls">
+    <button id="add-state">Add State</button>
+    <button id="add-transition">Add Transition</button>
+    <button id="set-start-state">Set Start State</button>
+    <button id="toggle-accepting-state">Toggle Accepting State</button>
+    <button id="edit-state">Edit State</button>
+    <button id="delete-state">Delete State</button>
+    <button id="edit-transition">Edit Transition</button>
+    <button id="delete-transition">Delete Transition</button>
+  </div>
+  
+  <div id="latex-output"></div>
+  
+  <button id="export-button">Export LaTeX</button>
+  
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const latexOutput = document.getElementById('latex-output');
+    
+    let states = [];
+    let transitions = [];
+    let startState = null;
+    
+    // Function to draw the automata on the canvas
+    function drawAutomata() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw states
+      states.forEach(state => {
+        const { x, y, label, isAccepting } = state;
+        ctx.beginPath();
+        ctx.arc(x, y, 30, 0, 2 * Math.PI);
+        ctx.strokeStyle = isAccepting ? 'blue' : 'black';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = 'black';
+        ctx.fillText(label, x, y);
+      });
+      
+      // Draw transitions
+      transitions.forEach(transition => {
+        const { from, to, label } = transition;
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x, to.y);
+        ctx.strokeStyle = 'black';
+        ctx.stroke();
+        ctx.fillStyle = 'black';
+        ctx.fillText(label, (from.x + to.x) / 2, (from.y + to.y) / 2);
+      });
+      
+      // Highlight start state
+      if (startState) {
+        ctx.beginPath();
+        ctx.moveTo(startState.x - 40, startState.y);
+        ctx.lineTo(startState.x - 10, startState.y);
+        ctx.strokeStyle = 'black';
+        ctx.stroke();
+      }
+    }
+
+    let selectedState = null;
+    let selectedTransition = null;
+    
+    // Function to update the positions of states in the LaTeX code
+    function updateStatePositions() {
+      const firstState = states[0];
+      firstState.latexPosition = '';
+      
+      for (let i = 1; i < states.length; i++) {
+        const state = states[i];
+        const relativePosition = getRelativePosition(state);
+        state.latexPosition = relativePosition;
+      }
+    }
+    
+    // Function to get the relative position of a state
+    function getRelativePosition(state) {
+      const { x, y } = state;
+      
+      for (let i = 0; i < states.length; i++) {
+        const referenceState = states[i];
+        if (referenceState.latexPosition !== undefined) {
+          const dx = x - referenceState.x;
+          const dy = y - referenceState.y;
+          
+          if (dx > 0 && dy < 0) {
+            return '[above right of=' + referenceState.label + ']';
+          } else if (dx < 0 && dy < 0) {
+            return '[above left of=' + referenceState.label + ']';
+          } else if (dx > 0 && dy > 0) {
+            return '[below right of=' + referenceState.label + ']';
+          } else if (dx < 0 && dy > 0) {
+            return '[below left of=' + referenceState.label + ']';
+          }
+        }
+      }
+      
+      return '[right of=' + states[0].label + ']';
+    }
+    
+    // Function to handle state click event
+    function handleStateClick(state) {
+      selectedState = state;
+      selectedTransition = null;
+      drawAutomata();
+    }
+    
+    // Function to handle transition click event
+    function handleTransitionClick(transition) {
+      selectedState = null;
+      selectedTransition = transition;
+      drawAutomata();
+    }
+    
+    // Event listener for the "Edit State" button
+    document.getElementById('edit-state').addEventListener('click', function() {
+      if (selectedState) {
+        const newLabel = prompt('Enter new state label:', selectedState.label);
+        if (newLabel) {
+          selectedState.label = newLabel;
+          drawAutomata();
+        }
+      }
+    });
+    
+    // Event listener for the "Delete State" button
+    document.getElementById('delete-state').addEventListener('click', function() {
+      if (selectedState) {
+        states = states.filter(state => state !== selectedState);
+        transitions = transitions.filter(transition => transition.from !== selectedState && transition.to !== selectedState);
+        selectedState = null;
+        drawAutomata();
+      }
+    });
+    
+    // Event listener for the "Edit Transition" button
+    document.getElementById('edit-transition').addEventListener('click', function() {
+      if (selectedTransition) {
+        const newLabel = prompt('Enter new transition label:', selectedTransition.label);
+        if (newLabel) {
+          selectedTransition.label = newLabel;
+          drawAutomata();
+        }
+      }
+    });
+    
+    // Event listener for the "Delete Transition" button
+    document.getElementById('delete-transition').addEventListener('click', function() {
+      if (selectedTransition) {
+        transitions = transitions.filter(transition => transition !== selectedTransition);
+        selectedTransition = null;
+        drawAutomata();
+      }
+    });
+    
+    // Event listener for canvas click event
+    canvas.addEventListener('click', function(event) {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      
+      // Check if a state is clicked
+      states.forEach(state => {
+        const distance = Math.sqrt((x - state.x) ** 2 + (y - state.y) ** 2);
+        if (distance <= 30) {
+          handleStateClick(state);
+        }
+      });
+      
+      // Check if a transition is clicked
+      transitions.forEach(transition => {
+        const { from, to } = transition;
+        const midX = (from.x + to.x) / 2;
+        const midY = (from.y + to.y) / 2;
+        const distance = Math.sqrt((x - midX) ** 2 + (y - midY) ** 2);
+        if (distance <= 20) {
+          handleTransitionClick(transition);
+        }
+      });
+    });
+    
+    // Event listener for canvas drag event
+    canvas.addEventListener('mousedown', function(event) {
+      if (selectedState) {
+        const startX = event.clientX;
+        const startY = event.clientY;
+        
+        function handleMouseMove(event) {
+          const dx = event.clientX - startX;
+          const dy = event.clientY - startY;
+          selectedState.x += dx;
+          selectedState.y += dy;
+          drawAutomata();
+          updateStatePositions();
+        }
+        
+        function handleMouseUp() {
+          canvas.removeEventListener('mousemove', handleMouseMove);
+          canvas.removeEventListener('mouseup', handleMouseUp);
+        }
+        
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('mouseup', handleMouseUp);
+      }
+    });
+    
+    // Function to generate the LaTeX code for the automata-tikz package
+    function generateLatexCode() {
+      let latexCode = '\\begin{tikzpicture}[shorten >=1pt,node distance=2cm,auto]\n';
+      
+      // Generate LaTeX code for states
+      states.forEach((state, index) => {
+        const { label, isAccepting, latexPosition } = state;
+        const stateType = isAccepting ? 'state,accepting' : 'state';
+        const startStateMarker = state === startState ? ',initial' : '';
+        
+        if (index === 0) {
+          latexCode += `\\node[${stateType}${startStateMarker}] (${label}) {$${label}$};\n`;
+        } else {
+          latexCode += `\\node[${stateType}${startStateMarker}] (${label}) ${latexPosition} {$${label}$};\n`;
+        }
+      });
+      
+      // Generate LaTeX code for transitions
+      latexCode += `\\path[->]\n`;
+      transitions.forEach(transition => {
+        const { from, to, label } = transition;
+        latexCode += `(${from.label}) edge node {${label}} (${to.label})\n`;
+      });
+      latexCode += `;\n`;
+      
+      latexCode += '\\end{tikzpicture}';
+      
+      return latexCode;
+    }
+    
+    // Event listener for the "Add State" button
+    document.getElementById('add-state').addEventListener('click', function() {
+      const label = prompt('Enter state label:');
+      if (label) {
+        const state = {
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          label: label,
+          isAccepting: false
+        };
+        states.push(state);
+        drawAutomata();
+      }
+    });
+    
+    // Event listener for the "Add Transition" button
+    document.getElementById('add-transition').addEventListener('click', function() {
+      const fromLabel = prompt('Enter "from" state label:');
+      const toLabel = prompt('Enter "to" state label:');
+      const label = prompt('Enter transition label:');
+      
+      if (fromLabel && toLabel && label) {
+        const fromState = states.find(state => state.label === fromLabel);
+        const toState = states.find(state => state.label === toLabel);
+        
+        if (fromState && toState) {
+          const transition = {
+            from: fromState,
+            to: toState,
+            label: label
+          };
+          transitions.push(transition);
+          drawAutomata();
+        }
+      }
+    });
+    
+    // Event listener for the "Set Start State" button
+    document.getElementById('set-start-state').addEventListener('click', function() {
+      const label = prompt('Enter start state label:');
+      if (label) {
+        startState = states.find(state => state.label === label);
+        drawAutomata();
+      }
+    });
+    
+    // Event listener for the "Toggle Accepting State" button
+    document.getElementById('toggle-accepting-state').addEventListener('click', function() {
+      const label = prompt('Enter state label:');
+      if (label) {
+        const state = states.find(state => state.label === label);
+        if (state) {
+          state.isAccepting = !state.isAccepting;
+          drawAutomata();
+        }
+      }
+    });
+    
+    // Event listener for the "Export LaTeX" button
+    document.getElementById('export-button').addEventListener('click', function() {
+      const latexCode = generateLatexCode();
+      latexOutput.innerText = latexCode;
+    });
+  </script>
+</body>
+</html>
